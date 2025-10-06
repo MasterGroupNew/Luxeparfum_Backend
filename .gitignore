@@ -1,0 +1,14 @@
+# Node modules (évite de versionner les dépendances)
+node_modules/
+
+# Fichier d'environnement (mot de passe, clés, etc.)
+.env
+
+# Fichiers log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dossiers temporaires
+dist/
+tmp/

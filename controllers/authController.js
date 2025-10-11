@@ -34,7 +34,7 @@ exports.register = async (req, res) => {
       prenoms,
       contact,
       email,
-      password: hashedPassword,
+      password,
       role: role || 'user',
       photoUrl: req.file ? req.file.path : null,
       street,

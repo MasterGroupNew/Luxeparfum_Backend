@@ -5,20 +5,70 @@ const { Op } = require('sequelize');
 // Ajouter un produit
 exports.createProduct = async (req, res) => {
   try {
-    const { nom, description, prix, quantite, categoryId } = req.body;
-    if (!nom || !description || !prix || !quantite || !categoryId) {
-      return res.status(400).json({ error: 'Tous les champs sont obligatoires.' });
+    console.log('Données reçues:', req.body);
+    console.log('Fichier reçu:', req.file);
+
+    const { nom, description, prix, quantite, categorie, genre } = req.body;
+    
+    // Conversion des types
+    const prixNumber = parseFloat(prix);
+    const quantiteNumber = parseInt(quantite);
+    
+    // Validation améliorée
+    if (!nom?.trim()) {
+      return res.status(400).json({ error: 'Le nom est obligatoire' });
+    }
+    if (!description?.trim()) {
+      return res.status(400).json({ error: 'La description est obligatoire' });
+    }
+    if (isNaN(prixNumber) || prixNumber <= 0) {
+      return res.status(400).json({ error: 'Le prix doit être un nombre positif' });
+    }
+    if (isNaN(quantiteNumber) || quantiteNumber < 0) {
+      return res.status(400).json({ error: 'La quantité doit être un nombre positif' });
+    }
+    if (!categorie?.trim()) {
+      return res.status(400).json({ error: 'La catégorie est obligatoire' });
+    }
+    if (!['Homme', 'Femme', 'Mixte'].includes(genre)) {
+      return res.status(400).json({ error: 'Le genre doit être Homme, Femme ou Mixte' });
     }
 
-    const category = await Category.findByPk(categoryId);
-    if (!category) return res.status(404).json({ error: 'Catégorie non trouvée' });
+    // Recherche ou création de la catégorie
+    const [category] = await Category.findOrCreate({
+      where: { 
+        nom: categorie.trim()
+      },
+      defaults: { 
+        description: `Catégorie ${categorie.trim()}`,
+        genre
+      }
+    });
 
     const imagePath = req.file ? req.file.path : null;
 
-    const produit = await Produit.create({ nom, description, prix, quantite, imagePath, categoryId });
-    res.status(201).json({ message: 'Produit ajouté', produit });
+    const produit = await Produit.create({ 
+      nom: nom.trim(), 
+      description: description.trim(), 
+      prix: prixNumber, 
+      quantite: quantiteNumber, 
+      imagePath,
+      categoryId: category.id
+    });
+
+    res.status(201).json({ 
+      message: 'Produit ajouté avec succès', 
+      produit: {
+        ...produit.toJSON(),
+        categorie: category
+      }
+    });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Erreur détaillée createProduct:', err);
+    res.status(400).json({ 
+      error: 'Erreur lors de la création du produit',
+      details: err.message 
+    });
   }
 };
 

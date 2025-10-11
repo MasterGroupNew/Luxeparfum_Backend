@@ -38,63 +38,78 @@
  */
 
 const sequelize = require('../config/db');
+const bcrypt = require('bcrypt');
+
+// Import des modèles
 const User = require('./users');
 const Produit = require('./produit');
 const Order = require('./orders');
 const OrderProducts = require('./orderProducts');
 const Cart = require('./cart');
 const CartProduct = require('./cartProduct');
-const Category = require('./category'); // Renommé de Cartegorie à Category
+const Category = require('./category');
 
-// Relations des commandes et utilisateurs
+// Définition des relations
+// Relations commandes et utilisateurs
 Order.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-Order.belongsToMany(Produit, { through: OrderProducts, foreignKey: 'orderId', otherKey: 'produitId', as: 'produits' });
+Order.belongsToMany(Produit, { 
+  through: OrderProducts, 
+  foreignKey: 'orderId', 
+  otherKey: 'produitId', 
+  as: 'produits' 
+});
 
-Produit.belongsToMany(Order, { through: OrderProducts, foreignKey: 'produitId', otherKey: 'orderId', as: 'orders' });
-Cart.belongsToMany(Produit, { through: CartProduct, foreignKey: 'cartId', otherKey: 'produitId', as: 'produits' });
-Produit.belongsToMany(Cart, { through: CartProduct, foreignKey: 'produitId', otherKey: 'cartId', as: 'carts' });
+// Relations produits et commandes
+Produit.belongsToMany(Order, { 
+  through: OrderProducts, 
+  foreignKey: 'produitId', 
+  otherKey: 'orderId', 
+  as: 'orders' 
+});
 
-CartProduct.belongsTo(Cart, { foreignKey: 'cartId', as: 'cart' });
-CartProduct.belongsTo(Produit, { foreignKey: 'produitId', as: 'produit' });
+// Relations panier
+Cart.belongsToMany(Produit, { 
+  through: CartProduct, 
+  foreignKey: 'cartId', 
+  otherKey: 'produitId', 
+  as: 'produits' 
+});
 
+Produit.belongsToMany(Cart, { 
+  through: CartProduct, 
+  foreignKey: 'produitId', 
+  otherKey: 'cartId', 
+  as: 'carts' 
+});
+
+// Relations produits et catégories
+Produit.belongsTo(Category, { foreignKey: 'categoryId', as: 'categorie' });
+Category.hasMany(Produit, { foreignKey: 'categoryId', as: 'produits' });
+
+// Relations utilisateur et panier
 Cart.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasOne(Cart, { foreignKey: 'userId', as: 'cart' });
 User.hasMany(Order, { foreignKey: 'userId', as: 'orders' });
 
-// Relations pour les produits et catégories
-Produit.belongsTo(Category, { foreignKey: 'categoryId', as: 'categorie' });
-Category.hasMany(Produit, { foreignKey: 'categoryId', as: 'produits' });
-
-// Synchronisation
 const initializeModels = async () => {
-  await sequelize.sync({ alter: true }); // crée/maj les tables
-  const existingUser = await User.findOne({ where: { email: 'admin@example.com' } });
-  if (!existingUser) {
-    const hashedPassword = await bcrypt.hash('admin123', 10);
-    await User.create({
-      nom: 'Admin',
-      prenoms: 'User',
-      contact: '0123456789',
-      email: 'admin@example.com',
-      password: hashedPassword,
-      role: 'admin',
-      photoUrl: null,
-    });
-    console.log('Utilisateur administrateur créé ✅');
-  } else {
-    console.log('Cet utilisateur existe déjà.');
+  try {
+    await sequelize.sync({ force: true });
+    console.log('✅ Tables synchronisées');
+    await User.createAdminUser();
+    return {
+      sequelize,
+      User,
+      Produit,
+      Order,
+      OrderProducts,
+      Cart,
+      CartProduct,
+      Category
+    };
+  } catch (error) {
+    console.error('Erreur synchronisation:', error);
+    throw error;
   }
-  console.log('✅ Base et tables synchronisées.');
-  return {
-    sequelize,
-    User,
-    Produit,
-    Order,
-    OrderProducts,
-    Cart,
-    CartProduct,
-    Category, // Renommé ici aussi
-  };
 };
 
 module.exports = {
@@ -106,5 +121,5 @@ module.exports = {
   Cart,
   CartProduct,
   Category,
-  initializeModels,
+  initializeModels
 };

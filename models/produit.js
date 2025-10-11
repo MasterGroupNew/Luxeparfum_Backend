@@ -26,7 +26,7 @@ const Produit = sequelize.define('Produit', {
   },
   categoryId: {
     type: DataTypes.INTEGER,
-    allowNull: false, // Changé à false car on veut toujours une catégorie
+    allowNull: true, // Changé à true pour correspondre à SET NULL
     references: {
       model: Category,
       key: 'id',

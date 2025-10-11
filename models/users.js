@@ -96,6 +96,7 @@ const User = sequelize.define(
     }
   },
   {
+    tableName: 'users', // Changé de 'Users' à 'users'
     timestamps: true, // Ajoute automatiquement createdAt et updatedAt
     indexes: [
       { unique: true, fields: ['email'] },    // Email unique
@@ -126,14 +127,13 @@ User.prototype.checkPassword = async function(password) {
   return await bcrypt.compare(password, this.password);
 };
 
-// Créer un utilisateur admin par défaut
-(async () => {
+// Ajouter méthode statique pour créer l'admin
+User.createAdminUser = async function() {
   try {
-    
-    const existingUser = await User.findOne({ where: { email: 'admin@example.com' } });
+    const existingUser = await this.findOne({ where: { email: 'admin@example.com' } });
     if (!existingUser) {
       const hashedPassword = await bcrypt.hash('admin123', 10);
-      await User.create({
+      await this.create({
         nom: 'Admin',
         prenoms: 'User',
         contact: '0123456789',
@@ -143,12 +143,11 @@ User.prototype.checkPassword = async function(password) {
         photoUrl: null,
       });
       console.log('Utilisateur administrateur créé ✅');
-    } else {
-      console.log('Cet utilisateur existe déjà.');
     }
   } catch (error) {
-    console.error('Erreur lors de la création de l’utilisateur admin :', error);
+    console.error('Erreur création admin:', error);
+    throw error;
   }
-})();
+};
 
 module.exports = User;

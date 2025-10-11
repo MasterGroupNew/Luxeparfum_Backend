@@ -132,13 +132,13 @@ User.createAdminUser = async function() {
   try {
     const existingUser = await this.findOne({ where: { email: 'admin@example.com' } });
     if (!existingUser) {
-      const hashedPassword = await bcrypt.hash('admin123', 10);
+      // Ne pas hasher le mot de passe ici car le hook beforeCreate le fera
       await this.create({
         nom: 'Admin',
         prenoms: 'User',
         contact: '0123456789',
         email: 'admin@example.com',
-        password: hashedPassword,
+        password: 'admin123', // Mot de passe en clair, sera hashé par le hook
         role: 'admin',
         photoUrl: null,
       });

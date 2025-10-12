@@ -93,7 +93,7 @@ User.hasMany(Order, { foreignKey: 'userId', as: 'orders' });
 
 const initializeModels = async () => {
   try {
-    await sequelize.sync({ force: true });
+    await sequelize.sync();
     console.log('✅ Tables synchronisées');
     await User.createAdminUser();
     return {

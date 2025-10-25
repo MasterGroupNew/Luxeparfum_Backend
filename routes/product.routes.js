@@ -31,7 +31,7 @@ router.post('/filter', productController.filterProducts);
 router.get('/genre/:genre', productController.getProductsByGender);
 
 // Mettre à jour un produit
-router.put('/update_product/:id', auth(['admin']), productController.updateProduct);
+router.put('/update_product/:id',  upload.single('image'),auth(['admin']),productController.updateProduct);
 
 // Supprimer un produit
 router.delete('/delete_product/:id', auth(['admin']), productController.deleteProduct);

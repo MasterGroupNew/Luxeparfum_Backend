@@ -2,43 +2,9 @@
  * @file models/index.js
  * @description Centralizes model imports and relationships for the application.
  * Defines associations between models and exports them for use in controllers and other parts of the application.
- * @requires sequelize
- * @requires models/users
- * @requires models/produit
- * @requires models/orders
- * @requires models/orderProducts
- * @requires models/cart
- * @requires models/cartProduct
- * @exports sequelize
- * @exports User
- *  @exports Produit
- * @exports Order
- * @exports OrderProducts
- * @exports Cart
- * @exports CartProduct
- * @function initializeModels - Initializes the models and their relationships, synchronizing the database.
- * @returns {Promise<Object>} - A promise that resolves to an object containing the initialized models.
- * @description This function sets up the database tables and their associations.
- * It is called during the application startup to ensure that the database schema is up-to-date.
- * @example
- * const { initializeModels } = require('./models');
- * initializeModels()
- *   .then(models => {
- * console.log('Models initialized:', models);
- *   })
- * .catch(err => {
- * console.error('Error initializing models:', err);
- * }
- */
-
-/**
- * @file models/index.js
- * @description Centralizes model imports and relationships for the application.
- * Defines associations between models and exports them for use in controllers and other parts of the application.
  */
 
 const sequelize = require('../config/db');
-const bcrypt = require('bcrypt');
 
 // Import des modèles
 const User = require('./users');
@@ -49,9 +15,15 @@ const Cart = require('./cart');
 const CartProduct = require('./cartProduct');
 const Category = require('./category');
 
-// Définition des relations
+// =====================
+// DÉFINITION DES RELATIONS
+// =====================
+
 // Relations commandes et utilisateurs
 Order.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+User.hasMany(Order, { foreignKey: 'userId', as: 'orders' });
+
+// Relations commandes et produits (Many-to-Many)
 Order.belongsToMany(Produit, { 
   through: OrderProducts, 
   foreignKey: 'orderId', 
@@ -59,7 +31,6 @@ Order.belongsToMany(Produit, {
   as: 'produits' 
 });
 
-// Relations produits et commandes
 Produit.belongsToMany(Order, { 
   through: OrderProducts, 
   foreignKey: 'produitId', 
@@ -67,7 +38,7 @@ Produit.belongsToMany(Order, {
   as: 'orders' 
 });
 
-// Relations panier
+// Relations panier et produits (Many-to-Many)
 Cart.belongsToMany(Produit, { 
   through: CartProduct, 
   foreignKey: 'cartId', 
@@ -82,20 +53,62 @@ Produit.belongsToMany(Cart, {
   as: 'carts' 
 });
 
-// Relations produits et catégories
+// Relations utilisateur et panier (One-to-One)
+Cart.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+User.hasOne(Cart, { foreignKey: 'userId', as: 'cart' });
+
+// Relations produits et catégories (Many-to-One)
 Produit.belongsTo(Category, { foreignKey: 'categoryId', as: 'categorie' });
 Category.hasMany(Produit, { foreignKey: 'categoryId', as: 'produits' });
 
-// Relations utilisateur et panier
-Cart.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-User.hasOne(Cart, { foreignKey: 'userId', as: 'cart' });
-User.hasMany(Order, { foreignKey: 'userId', as: 'orders' });
+// =====================
+// INITIALISATION DES MODÈLES
+// =====================
 
-const initializeModels = async () => {
+/**
+ * Initialise les modèles et synchronise la base de données
+ * @param {Object} options - Options de synchronisation
+ * @param {boolean} options.force - Si true, supprime et recrée les tables (⚠️ EFFACE LES DONNÉES)
+ * @param {boolean} options.alter - Si true, modifie les tables pour correspondre aux modèles (RECOMMANDÉ en dev)
+ * @returns {Promise<Object>} - Objet contenant tous les modèles
+ */
+const initializeModels = async (options = {}) => {
   try {
-    await sequelize.sync();
-    console.log('✅ Tables synchronisées');
-    await User.createAdminUser();
+    console.log('🔄 Synchronisation de la base de données...');
+    
+    // Options de synchronisation
+    const syncOptions = {
+      force: options.force || false,  // ⚠️ Ne jamais utiliser en production
+      alter: options.alter || false   // Modifie les colonnes pour correspondre au modèle
+    };
+
+    // Si en développement, utiliser alter pour ajouter les colonnes manquantes
+    if (process.env.NODE_ENV === 'development' && !syncOptions.force) {
+      syncOptions.alter = true;
+      console.log('📝 Mode développement : alter activé (ajout/modification des colonnes)');
+    }
+
+    // Synchroniser la base de données
+    await sequelize.sync(syncOptions);
+    
+    if (syncOptions.force) {
+      console.log('⚠️  Tables supprimées et recréées (force: true)');
+    } else if (syncOptions.alter) {
+      console.log('✅ Tables synchronisées avec modifications (alter: true)');
+    } else {
+      console.log('✅ Tables synchronisées');
+    }
+
+    // Créer l'utilisateur admin par défaut
+    try {
+      await User.createAdminUser();
+    } catch (error) {
+      console.error('⚠️  Erreur création admin:', error.message);
+      // Ne pas bloquer le démarrage si l'admin existe déjà
+    }
+
+    console.log('✅ Initialisation des modèles terminée\n');
+
     return {
       sequelize,
       User,
@@ -107,10 +120,30 @@ const initializeModels = async () => {
       Category
     };
   } catch (error) {
-    console.error('Erreur synchronisation:', error);
+    console.error('❌ Erreur lors de la synchronisation:', error);
     throw error;
   }
 };
+
+// =====================
+// FONCTION DE NETTOYAGE
+// =====================
+
+/**
+ * Ferme proprement la connexion à la base de données
+ */
+const closeConnection = async () => {
+  try {
+    await sequelize.close();
+    console.log('✅ Connexion à la base de données fermée');
+  } catch (error) {
+    console.error('❌ Erreur lors de la fermeture de la connexion:', error);
+  }
+};
+
+// =====================
+// EXPORTS
+// =====================
 
 module.exports = {
   sequelize,
@@ -121,5 +154,6 @@ module.exports = {
   Cart,
   CartProduct,
   Category,
-  initializeModels
+  initializeModels,
+  closeConnection
 };

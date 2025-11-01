@@ -52,13 +52,16 @@ const User = sequelize.define(
       type: DataTypes.ENUM('user', 'admin'), // Seuls 'user' et 'admin' sont autorisés
       defaultValue: 'user' 
     },
-    // Profile
+    // Profile - Images Cloudinary
     photoUrl: { 
       type: DataTypes.STRING, 
       allowNull: true,
-      validate: {
-        isUrl: true // Doit être une URL valide
-      }
+      comment: 'URL complète de la photo sur Cloudinary'
+    },
+    photoId: { // ✅ NOUVEAU CHAMP POUR CLOUDINARY
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Public ID Cloudinary pour la suppression de l\'image'
     },
     active: {
       type: DataTypes.BOOLEAN,
@@ -96,7 +99,7 @@ const User = sequelize.define(
     }
   },
   {
-    tableName: 'users', // Changé de 'Users' à 'users'
+    tableName: 'users',
     timestamps: true, // Ajoute automatiquement createdAt et updatedAt
     indexes: [
       { unique: true, fields: ['email'] },    // Email unique
@@ -127,7 +130,18 @@ User.prototype.checkPassword = async function(password) {
   return await bcrypt.compare(password, this.password);
 };
 
-// Ajouter méthode statique pour créer l'admin
+/**
+ * Méthode pour obtenir les données utilisateur sans le mot de passe
+ * @returns {Object} - Utilisateur sans mot de passe
+ */
+User.prototype.toSafeObject = function() {
+  const { password, ...userWithoutPassword } = this.toJSON();
+  return userWithoutPassword;
+};
+
+/**
+ * Créer l'utilisateur administrateur par défaut
+ */
 User.createAdminUser = async function() {
   try {
     const existingUser = await this.findOne({ where: { email: 'admin@example.com' } });
@@ -135,19 +149,28 @@ User.createAdminUser = async function() {
       // Ne pas hasher le mot de passe ici car le hook beforeCreate le fera
       await this.create({
         nom: 'Admin',
-        prenoms: 'User',
+        prenoms: 'Super',
         contact: '0123456789',
         email: 'admin@example.com',
         password: 'admin123', // Mot de passe en clair, sera hashé par le hook
         role: 'admin',
         photoUrl: null,
+        photoId: null,
+        street: null,
+        city: 'Abidjan',
+        postalCode: null,
+        country: 'Côte d\'Ivoire'
       });
-      console.log('Utilisateur administrateur créé ✅');
+      console.log('✅ Utilisateur administrateur créé avec succès');
+      console.log('📧 Email: admin@example.com');
+      console.log('🔑 Mot de passe: admin123');
+    } else {
+      console.log('ℹ️ L\'administrateur existe déjà');
     }
   } catch (error) {
-    console.error('Erreur création admin:', error);
+    console.error('❌ Erreur création admin:', error);
     throw error;
   }
 };
 
-module.exports = User;
+module.exports = User;  

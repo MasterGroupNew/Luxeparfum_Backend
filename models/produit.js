@@ -6,6 +6,9 @@ const Produit = sequelize.define('Produit', {
   nom: {
     type: DataTypes.STRING,
     allowNull: false,
+    validate: {
+      len: [2, 100] // Nom entre 2 et 100 caractères
+    }
   },
   description: {
     type: DataTypes.TEXT,
@@ -14,21 +17,41 @@ const Produit = sequelize.define('Produit', {
   prix: {
     type: DataTypes.FLOAT,
     allowNull: false,
+    validate: {
+      min: 0 // Prix ne peut pas être négatif
+    }
   },
   quantite: {
     type: DataTypes.INTEGER,
     allowNull: false,
     defaultValue: 0,
+    validate: {
+      min: 0 // Quantité ne peut pas être négative
+    }
   },
+  // Images Cloudinary
   imagePath: {
     type: DataTypes.STRING,
     allowNull: true,
+    comment: 'URL complète de l\'image sur Cloudinary'
   },
+  imageId: { // ✅ NOUVEAU CHAMP POUR CLOUDINARY
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Public ID Cloudinary pour la suppression de l\'image'
+  },
+  // Genre du parfum
+  genre: {
+    type: DataTypes.ENUM('Homme', 'Femme', 'Mixte'),
+    allowNull: true,
+    defaultValue: 'Mixte'
+  },
+  // Catégorie
   categoryId: {
     type: DataTypes.INTEGER,
-    allowNull: true, // Changé à true pour correspondre à SET NULL
+    allowNull: true,
     references: {
-      model: Category,
+      model: 'categories', // Nom de la table, pas le modèle
       key: 'id',
     },
     onUpdate: 'CASCADE',
@@ -37,9 +60,20 @@ const Produit = sequelize.define('Produit', {
 }, {
   tableName: 'produits',
   timestamps: true,
+  indexes: [
+    {
+      fields: ['categoryId']
+    },
+    {
+      fields: ['genre']
+    },
+    {
+      fields: ['prix']
+    }
+  ]
 });
 
-// Définition des associations avec l'alias correct
-//Produit.belongsTo(Category, { as: 'cartegorie', foreignKey: 'categoryId' });
+// ✅ Les associations sont définies dans models/index.js
+// Ne pas les définir ici pour éviter les dépendances circulaires
 
 module.exports = Produit;

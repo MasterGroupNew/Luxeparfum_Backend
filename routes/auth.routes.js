@@ -2,7 +2,12 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const authMiddleware = require('../middleware/auth.middleware');
-//
+
+// ✅ IMPORT DE LA CONFIGURATION CLOUDINARY
+const { upload } = require('../config/upload');
+
+// ❌ SUPPRIMER CETTE PARTIE (stockage local)
+/*
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -10,9 +15,10 @@ const uploadDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
-const upload = multer({ dest: uploadDir, limits: { fileSize: 5 * 1024 * 1024 } }); // 5 Mo max
+const upload = multer({ dest: uploadDir, limits: { fileSize: 5 * 1024 * 1024 } });
+*/
 
-
+// ✅ LES ROUTES RESTENT IDENTIQUES
 // Inscription avec photo et adresse
 router.post('/register', upload.single('photo'), authController.register);
 

@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models/index');
 const { Op } = require('sequelize');
+const { cloudinary } = require('../config/upload'); // ✅ Ajout de l'import
 
 const SECRET = process.env.JWT_SECRET;
 if (!SECRET) {
@@ -34,9 +35,10 @@ exports.register = async (req, res) => {
       prenoms,
       contact,
       email,
-      password,
+      password: hashedPassword, // ✅ Correction : utiliser hashedPassword
       role: role || 'user',
-      photoUrl: req.file ? req.file.path : null,
+      photoUrl: req.file ? req.file.path : null, // ✅ URL Cloudinary complète
+      photoId: req.file ? req.file.filename : null, // ✅ ID Cloudinary pour suppression
       street,
       city,
       postalCode,
@@ -108,7 +110,8 @@ exports.addUser = async (req, res) => {
       email,
       password: hashedPassword,
       role,
-      photoUrl: req.file ? req.file.path : null,
+      photoUrl: req.file ? req.file.path : null, // ✅ URL Cloudinary
+      photoId: req.file ? req.file.filename : null, // ✅ ID Cloudinary
     });
 
     res.status(201).json({ message: 'Utilisateur ajouté', user: newUser });
@@ -123,7 +126,9 @@ exports.addUser = async (req, res) => {
 // =====================
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.findAll();
+    const users = await User.findAll({
+      attributes: { exclude: ['password'] } // ✅ Ne pas renvoyer les mots de passe
+    });
     res.json(users);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -135,7 +140,9 @@ exports.getAllUsers = async (req, res) => {
 // =====================
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const user = await User.findByPk(req.params.id, {
+      attributes: { exclude: ['password'] } // ✅ Ne pas renvoyer le mot de passe
+    });
     if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
     res.json(user);
   } catch (err) {
@@ -154,23 +161,49 @@ exports.updateUser = async (req, res) => {
     const user = await User.findByPk(id);
     if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
 
+    let photoUrl = user.photoUrl;
+    let photoId = user.photoId;
+
+    // ✅ Si une nouvelle photo est uploadée
+    if (req.file) {
+      // Supprimer l'ancienne photo de Cloudinary
+      if (user.photoId) {
+        try {
+          await cloudinary.uploader.destroy(user.photoId);
+          console.log('✅ Ancienne photo supprimée de Cloudinary');
+        } catch (error) {
+          console.error('⚠️ Erreur suppression ancienne photo:', error);
+        }
+      }
+      
+      // Utiliser la nouvelle photo
+      photoUrl = req.file.path;
+      photoId = req.file.filename;
+    }
+
     const updatedData = {
       nom,
       prenoms,
       contact,
       email,
       role,
-      photoUrl: req.file ? req.file.path : user.photoUrl,
+      photoUrl,
+      photoId,
       street: street || user.street,
       city: city || user.city,
       postalCode: postalCode || user.postalCode,
       country: country || user.country
     };
+    
     if (password) updatedData.password = await bcrypt.hash(password, 10);
 
     await user.update(updatedData);
-    res.json({ message: 'Utilisateur mis à jour', user });
+    
+    // ✅ Ne pas renvoyer le mot de passe
+    const { password: _, ...userWithoutPassword } = user.toJSON();
+    res.json({ message: 'Utilisateur mis à jour', user: userWithoutPassword });
   } catch (err) {
+    console.error('Erreur updateUser:', err);
     res.status(400).json({ error: err.message });
   }
 };
@@ -180,9 +213,26 @@ exports.updateUser = async (req, res) => {
 // =====================
 exports.deleteUser = async (req, res) => {
   try {
-    await User.destroy({ where: { id: req.params.id } });
+    const user = await User.findByPk(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+
+    // ✅ Supprimer la photo de Cloudinary avant de supprimer l'utilisateur
+    if (user.photoId) {
+      try {
+        await cloudinary.uploader.destroy(user.photoId);
+        console.log('✅ Photo supprimée de Cloudinary');
+      } catch (error) {
+        console.error('⚠️ Erreur suppression photo:', error);
+      }
+    }
+
+    await user.destroy();
     res.json({ message: 'Utilisateur supprimé' });
   } catch (err) {
+    console.error('Erreur deleteUser:', err);
     res.status(400).json({ error: err.message });
   }
 };
@@ -192,7 +242,9 @@ exports.deleteUser = async (req, res) => {
 // =====================
 exports.getProfile = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id);
+    const user = await User.findByPk(req.user.id, {
+      attributes: { exclude: ['password'] } // ✅ Ne pas renvoyer le mot de passe
+    });
     if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
     res.json(user);
   } catch (err) {
@@ -209,22 +261,48 @@ exports.updateProfile = async (req, res) => {
     if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
 
     const { nom, prenoms, contact, email, password, street, city, postalCode, country } = req.body;
+    
+    let photoUrl = user.photoUrl;
+    let photoId = user.photoId;
+
+    // ✅ Si une nouvelle photo est uploadée
+    if (req.file) {
+      // Supprimer l'ancienne photo de Cloudinary
+      if (user.photoId) {
+        try {
+          await cloudinary.uploader.destroy(user.photoId);
+          console.log('✅ Ancienne photo supprimée de Cloudinary');
+        } catch (error) {
+          console.error('⚠️ Erreur suppression ancienne photo:', error);
+        }
+      }
+      
+      photoUrl = req.file.path;
+      photoId = req.file.filename;
+    }
+
     const updatedData = {
       nom,
       prenoms,
       contact,
       email,
-      photoUrl: req.file ? req.file.path : user.photoUrl,
+      photoUrl,
+      photoId,
       street: street || user.street,
       city: city || user.city,
       postalCode: postalCode || user.postalCode,
       country: country || user.country
     };
+    
     if (password) updatedData.password = await bcrypt.hash(password, 10);
 
     await user.update(updatedData);
-    res.json({ message: 'Profil mis à jour', user });
+    
+    // ✅ Ne pas renvoyer le mot de passe
+    const { password: _, ...userWithoutPassword } = user.toJSON();
+    res.json({ message: 'Profil mis à jour', user: userWithoutPassword });
   } catch (err) {
+    console.error('Erreur updateProfile:', err);
     res.status(400).json({ error: err.message });
   }
 };
@@ -259,7 +337,10 @@ exports.changePassword = async (req, res) => {
 // =====================
 exports.getUsersByRole = async (req, res) => {
   try {
-    const users = await User.findAll({ where: { role: req.params.role } });
+    const users = await User.findAll({ 
+      where: { role: req.params.role },
+      attributes: { exclude: ['password'] } // ✅ Ne pas renvoyer les mots de passe
+    });
     res.json(users);
   } catch (err) {
     res.status(400).json({ error: err.message });

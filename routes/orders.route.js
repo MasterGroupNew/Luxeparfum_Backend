@@ -4,16 +4,16 @@ const ordersController = require('../controllers/ordersController');
 const auth = require('../middleware/auth.middleware');
 
 // ➤ Créer une commande
-router.post('/add_order', auth, ordersController.createOrder);
+router.post('/add_order', auth(), ordersController.createOrder);
 
 // ➤ Récupérer toutes les commandes
-router.get('/get_orders', auth, ordersController.getOrders);
+router.get('/get_orders', auth(), ordersController.getOrders);
 
 // ➤ Récupérer les commandes d’un utilisateur
-router.get('/user/:userId', auth, ordersController.getOrdersByUser);
+router.get('/user/:userId', auth(), ordersController.getOrdersByUser);
 
 // ➤ Supprimer une commande
-router.delete('/delete_order/:id', auth, ordersController.deleteOrder);
+router.delete('/delete_order/:id', auth(), ordersController.deleteOrder);
 
 // ➤ Mettre à jour le statut d’une commande (admin uniquement)
 router.put('/update_order_status/:id', auth(['admin']), ordersController.updateOrderStatus);
@@ -31,6 +31,6 @@ router.put('/update_order_payment/:id', auth(['admin']), ordersController.update
 router.put('/update_order_total/:id', auth(['admin']), ordersController.updateOrderTotal);
 
 // ➤ Récupérer une commande par ID
-router.get('/get_order/:id', auth, ordersController.getOrderById);
+router.get('/get_order/:id', auth(), ordersController.getOrderById);
 
 module.exports = router;

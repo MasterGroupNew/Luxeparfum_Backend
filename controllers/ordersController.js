@@ -2,22 +2,46 @@ const { Order, Produit, OrderProducts, User } = require('../models');
 
 // ➤ Créer une commande
 exports.createOrder = async (req, res) => {
+  console.log('========== DÉBUT CREATE ORDER ==========');
+  console.log('Timestamp:', new Date().toISOString());
+  console.log('User from middleware:', req.user);
+  console.log('Body reçu:', JSON.stringify(req.body, null, 2));
+
   try {
+    // Étape 1: Récupération des données
+    console.log('--- Étape 1: Récupération des données ---');
     const { items, shippingInfo } = req.body;
-    const userId = req.user.id; // Récupéré depuis le middleware auth
+    const userId = req.user?.id;
     
+    console.log('userId:', userId);
+    console.log('items count:', items?.length);
+    console.log('shippingInfo:', shippingInfo);
+
     // Validation des données
+    console.log('--- Étape 2: Validation ---');
+    if (!userId) {
+      console.error('❌ userId manquant');
+      return res.status(401).json({ error: 'Utilisateur non authentifié' });
+    }
+
     if (!items || !Array.isArray(items) || items.length === 0) {
+      console.error('❌ Items invalides');
       return res.status(400).json({ error: 'Aucun article dans la commande' });
     }
 
     if (!shippingInfo) {
+      console.error('❌ shippingInfo manquant');
       return res.status(400).json({ error: 'Informations de livraison manquantes' });
     }
 
+    console.log('✅ Validation OK');
+
     // Construire l'adresse complète
+    console.log('--- Étape 3: Préparation des données ---');
     const { ville, commune, pointRepere } = shippingInfo.adresseLivraison || {};
     const shippingAddress = `${commune || ''}, ${ville || ''}${pointRepere ? ', ' + pointRepere : ''}`.trim();
+
+    console.log('shippingAddress construit:', shippingAddress);
 
     // Créer les informations client en JSON
     const customerInfo = JSON.stringify({
@@ -27,7 +51,20 @@ exports.createOrder = async (req, res) => {
       email: shippingInfo.email
     });
 
+    console.log('customerInfo construit:', customerInfo);
+    console.log('paymentMethod:', shippingInfo.modePaiement);
+
     // Créer la commande principale
+    console.log('--- Étape 4: Création de la commande ---');
+    console.log('Données à insérer:', {
+      userId,
+      total: 0,
+      statut: 'en attente',
+      shippingAddress,
+      customerInfo,
+      paymentMethod: shippingInfo.modePaiement
+    });
+
     const order = await Order.create({
       userId,
       total: 0,
@@ -37,12 +74,21 @@ exports.createOrder = async (req, res) => {
       paymentMethod: shippingInfo.modePaiement
     });
 
+    console.log('✅ Commande créée avec ID:', order.id);
+
     // Calculer le total et créer les OrderProducts
+    console.log('--- Étape 5: Ajout des produits ---');
     let total = 0;
-    for (const item of items) {
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      console.log(`\nTraitement produit ${i + 1}/${items.length}:`, item);
+      
       const produit = await Produit.findByPk(item.id);
+      console.log('Produit trouvé:', produit ? `${produit.nom} - ${produit.prix} FCFA` : 'NON TROUVÉ');
       
       if (!produit) {
+        console.error(`❌ Produit ${item.id} non trouvé, annulation de la commande...`);
         await OrderProducts.destroy({ where: { orderId: order.id } });
         await order.destroy();
         return res.status(404).json({ 
@@ -52,19 +98,26 @@ exports.createOrder = async (req, res) => {
 
       const itemTotal = produit.prix * item.quantity;
       total += itemTotal;
+      console.log(`Prix unitaire: ${produit.prix}, Quantité: ${item.quantity}, Sous-total: ${itemTotal}`);
 
-      await OrderProducts.create({
+      console.log('Création OrderProduct...');
+      const orderProduct = await OrderProducts.create({
         orderId: order.id,
         produitId: item.id,
         quantite: item.quantity
       });
+      console.log('✅ OrderProduct créé, ID:', orderProduct.id);
     }
 
-    // Mettre à jour le total
+    console.log(`\n--- Étape 6: Mise à jour du total ---`);
+    console.log('Total calculé:', total);
     order.total = total;
     await order.save();
+    console.log('✅ Total mis à jour');
 
-    res.status(201).json({ 
+    // Réponse de succès
+    console.log('--- Étape 7: Envoi de la réponse ---');
+    const response = { 
       message: 'Commande créée avec succès',
       orderId: order.id,
       order: {
@@ -75,15 +128,32 @@ exports.createOrder = async (req, res) => {
         paymentMethod: order.paymentMethod,
         createdAt: order.createdAt
       }
-    });
+    };
+    console.log('Réponse à envoyer:', JSON.stringify(response, null, 2));
+    
+    console.log('✅ ========== FIN CREATE ORDER (SUCCESS) ==========\n');
+    return res.status(201).json(response);
 
   } catch (err) {
-    console.error('Erreur création commande:', err);
-    res.status(500).json({ error: err.message });
+    console.error('========== ERREUR CREATE ORDER ==========');
+    console.error('Type d\'erreur:', err.name);
+    console.error('Message:', err.message);
+    console.error('Stack:', err.stack);
+    
+    if (err.original) {
+      console.error('Erreur SQL originale:', err.original);
+    }
+    
+    console.error('========== FIN ERREUR ==========\n');
+    
+    return res.status(500).json({ 
+      error: err.message,
+      type: err.name
+    });
   }
 };
 
-// ➤ Récupérer toutes les commandes
+// Reste du code inchangé...
 exports.getOrders = async (req, res) => {
   try {
     const orders = await Order.findAll({
@@ -133,7 +203,6 @@ exports.getOrders = async (req, res) => {
   }
 };
 
-// ➤ Récupérer les commandes d'un utilisateur
 exports.getOrdersByUser = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -179,7 +248,6 @@ exports.getOrdersByUser = async (req, res) => {
   }
 };
 
-// ➤ Récupérer une commande par ID
 exports.getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -231,11 +299,9 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-// ➤ Supprimer une commande
 exports.deleteOrder = async (req, res) => {
   try {
     const { id } = req.params;
-
     await OrderProducts.destroy({ where: { orderId: id } });
     const deleted = await Order.destroy({ where: { id } });
     
@@ -249,7 +315,6 @@ exports.deleteOrder = async (req, res) => {
   }
 };
 
-// ➤ Mettre à jour le statut d'une commande
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -267,7 +332,6 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
-// ➤ Mettre à jour les détails (produits) d'une commande
 exports.updateOrderDetails = async (req, res) => {
   try {
     const { id } = req.params;
@@ -276,10 +340,8 @@ exports.updateOrderDetails = async (req, res) => {
     const order = await Order.findByPk(id);
     if (!order) return res.status(404).json({ error: 'Commande non trouvée' });
 
-    // Supprimer les anciens produits
     await OrderProducts.destroy({ where: { orderId: id } });
 
-    // Recalculer le total
     let total = 0;
     for (const item of produits) {
       const produit = await Produit.findByPk(item.produitId);
@@ -302,7 +364,6 @@ exports.updateOrderDetails = async (req, res) => {
   }
 };
 
-// ➤ Mettre à jour l'adresse de livraison
 exports.updateOrderAddress = async (req, res) => {
   try {
     const { id } = req.params;
@@ -320,7 +381,6 @@ exports.updateOrderAddress = async (req, res) => {
   }
 };
 
-// ➤ Mettre à jour le mode de paiement
 exports.updateOrderPaymentMethod = async (req, res) => {
   try {
     const { id } = req.params;
@@ -338,7 +398,6 @@ exports.updateOrderPaymentMethod = async (req, res) => {
   }
 };
 
-// ➤ Mettre à jour le total (manuellement)
 exports.updateOrderTotal = async (req, res) => {
   try {
     const { id } = req.params;
@@ -356,7 +415,6 @@ exports.updateOrderTotal = async (req, res) => {
   }
 };
 
-// ➤ Statistiques des commandes et ventes
 exports.getOrderStats = async (req, res) => {
   try {
     const { sequelize } = require('../models');
@@ -377,7 +435,6 @@ exports.getOrderStats = async (req, res) => {
   }
 };
 
-// ➤ Rechercher des commandes par statut, date, utilisateur
 exports.searchOrders = async (req, res) => {
   try {
     const { Op } = require('sequelize');

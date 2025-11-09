@@ -12,7 +12,7 @@ exports.createOrder = async (req, res) => {
     console.log('--- Étape 1: Récupération des données ---');
     const { items, shippingInfo } = req.body;
     const userId = req.user?.id;
-    
+
     console.log('userId:', userId);
     console.log('items count:', items?.length);
     console.log('shippingInfo:', shippingInfo);
@@ -83,16 +83,16 @@ exports.createOrder = async (req, res) => {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       console.log(`\nTraitement produit ${i + 1}/${items.length}:`, item);
-      
+
       const produit = await Produit.findByPk(item.id);
       console.log('Produit trouvé:', produit ? `${produit.nom} - ${produit.prix} FCFA` : 'NON TROUVÉ');
-      
+
       if (!produit) {
         console.error(`❌ Produit ${item.id} non trouvé, annulation de la commande...`);
         await OrderProducts.destroy({ where: { orderId: order.id } });
         await order.destroy();
-        return res.status(404).json({ 
-          error: `Produit avec l'ID ${item.id} non trouvé` 
+        return res.status(404).json({
+          error: `Produit avec l'ID ${item.id} non trouvé`
         });
       }
 
@@ -117,7 +117,7 @@ exports.createOrder = async (req, res) => {
 
     // Réponse de succès
     console.log('--- Étape 7: Envoi de la réponse ---');
-    const response = { 
+    const response = {
       message: 'Commande créée avec succès',
       orderId: order.id,
       order: {
@@ -130,7 +130,7 @@ exports.createOrder = async (req, res) => {
       }
     };
     console.log('Réponse à envoyer:', JSON.stringify(response, null, 2));
-    
+
     console.log('✅ ========== FIN CREATE ORDER (SUCCESS) ==========\n');
     return res.status(201).json(response);
 
@@ -139,14 +139,14 @@ exports.createOrder = async (req, res) => {
     console.error('Type d\'erreur:', err.name);
     console.error('Message:', err.message);
     console.error('Stack:', err.stack);
-    
+
     if (err.original) {
       console.error('Erreur SQL originale:', err.original);
     }
-    
+
     console.error('========== FIN ERREUR ==========\n');
-    
-    return res.status(500).json({ 
+
+    return res.status(500).json({
       error: err.message,
       type: err.name
     });
@@ -158,16 +158,17 @@ exports.getOrders = async (req, res) => {
   try {
     const orders = await Order.findAll({
       include: [
-        { 
-          model: User, 
+        {
+          model: User,
           as: 'user',
           attributes: ['id', 'nom', 'email']
         },
-        { 
-          model: Produit, 
-          as: 'produits', 
+        {
+          model: Produit,
+          as: 'produits',
           through: { attributes: ['quantite'] },
-          attributes: ['id', 'nom', 'prix', 'image']
+          attributes: ['id', 'nom', 'prix', 'imagePath', 'imageId'] // ✅ Correction ici
+
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -175,7 +176,7 @@ exports.getOrders = async (req, res) => {
 
     const formattedOrders = orders.map(order => {
       const customerInfo = order.customerInfo ? JSON.parse(order.customerInfo) : {};
-      
+
       return {
         id: order.id,
         userId: order.userId,
@@ -190,7 +191,7 @@ exports.getOrders = async (req, res) => {
           id: produit.id,
           name: produit.nom,
           price: produit.prix,
-          image: produit.image,
+          image: produit.imagePath, // ✅ Correction ici
           quantity: produit.OrderProducts.quantite
         }))
       };
@@ -209,9 +210,9 @@ exports.getOrdersByUser = async (req, res) => {
     const orders = await Order.findAll({
       where: { userId },
       include: [
-        { 
-          model: Produit, 
-          as: 'produits', 
+        {
+          model: Produit,
+          as: 'produits',
           through: { attributes: ['quantite'] },
           attributes: ['id', 'nom', 'prix', 'image']
         }
@@ -221,7 +222,7 @@ exports.getOrdersByUser = async (req, res) => {
 
     const formattedOrders = orders.map(order => {
       const customerInfo = order.customerInfo ? JSON.parse(order.customerInfo) : {};
-      
+
       return {
         id: order.id,
         userId: order.userId,
@@ -253,14 +254,14 @@ exports.getOrderById = async (req, res) => {
     const { id } = req.params;
     const order = await Order.findByPk(id, {
       include: [
-        { 
-          model: User, 
+        {
+          model: User,
           as: 'user',
           attributes: ['id', 'nom', 'email']
         },
-        { 
-          model: Produit, 
-          as: 'produits', 
+        {
+          model: Produit,
+          as: 'produits',
           through: { attributes: ['quantite'] },
           attributes: ['id', 'nom', 'prix', 'image']
         }
@@ -272,7 +273,7 @@ exports.getOrderById = async (req, res) => {
     }
 
     const customerInfo = order.customerInfo ? JSON.parse(order.customerInfo) : {};
-    
+
     const formattedOrder = {
       id: order.id,
       userId: order.userId,
@@ -304,7 +305,7 @@ exports.deleteOrder = async (req, res) => {
     const { id } = req.params;
     await OrderProducts.destroy({ where: { orderId: id } });
     const deleted = await Order.destroy({ where: { id } });
-    
+
     if (!deleted) {
       return res.status(404).json({ error: 'Commande non trouvée' });
     }
@@ -418,12 +419,12 @@ exports.updateOrderTotal = async (req, res) => {
 exports.getOrderStats = async (req, res) => {
   try {
     const { sequelize } = require('../models');
-    
+
     const totalOrders = await Order.count();
     const totalSales = await Order.sum('total');
     const ordersByStatus = await Order.findAll({
       attributes: [
-        'statut', 
+        'statut',
         [sequelize.fn('COUNT', sequelize.col('statut')), 'count']
       ],
       group: ['statut'],
@@ -444,8 +445,8 @@ exports.searchOrders = async (req, res) => {
     if (status) where.statut = status;
     if (userId) where.userId = userId;
     if (startDate && endDate) {
-      where.createdAt = { 
-        [Op.between]: [new Date(startDate), new Date(endDate)] 
+      where.createdAt = {
+        [Op.between]: [new Date(startDate), new Date(endDate)]
       };
     }
 

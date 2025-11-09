@@ -1,3 +1,4 @@
+// models/OrderProducts.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
 
@@ -10,10 +11,18 @@ const OrderProducts = sequelize.define('OrderProducts', {
   orderId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    references: {
+      model: 'Orders',
+      key: 'id'
+    }
   },
   produitId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    references: {
+      model: 'Produits',
+      key: 'id'
+    }
   },
   quantite: {
     type: DataTypes.INTEGER,
@@ -21,7 +30,8 @@ const OrderProducts = sequelize.define('OrderProducts', {
     defaultValue: 1,
   },
 }, {
-  timestamps: false,
+  timestamps: true,
+  tableName: 'OrderProducts'
 });
 
 module.exports = OrderProducts;

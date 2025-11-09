@@ -1,30 +1,85 @@
-const { Order, Produit, OrderProducts, User } = require('../models/index');
+const { Order, Produit, OrderProducts, User } = require('../models');
 
 // ➤ Créer une commande
 exports.createOrder = async (req, res) => {
   try {
-    const { userId, produits } = req.body;
-    const order = await Order.create({ userId });
+    const { items, shippingInfo } = req.body;
+    const userId = req.user.id; // Récupéré depuis le middleware auth
+    
+    // Validation des données
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Aucun article dans la commande' });
+    }
 
+    if (!shippingInfo) {
+      return res.status(400).json({ error: 'Informations de livraison manquantes' });
+    }
+
+    // Construire l'adresse complète
+    const { ville, commune, pointRepere } = shippingInfo.adresseLivraison || {};
+    const shippingAddress = `${commune || ''}, ${ville || ''}${pointRepere ? ', ' + pointRepere : ''}`.trim();
+
+    // Créer les informations client en JSON
+    const customerInfo = JSON.stringify({
+      nom: shippingInfo.nom,
+      prenom: shippingInfo.prenom,
+      telephone: shippingInfo.telephone,
+      email: shippingInfo.email
+    });
+
+    // Créer la commande principale
+    const order = await Order.create({
+      userId,
+      total: 0,
+      statut: 'en attente',
+      shippingAddress,
+      customerInfo,
+      paymentMethod: shippingInfo.modePaiement
+    });
+
+    // Calculer le total et créer les OrderProducts
     let total = 0;
-    for (const item of produits) {
-      const produit = await Produit.findByPk(item.produitId);
-      if (!produit) continue;
+    for (const item of items) {
+      const produit = await Produit.findByPk(item.id);
+      
+      if (!produit) {
+        await OrderProducts.destroy({ where: { orderId: order.id } });
+        await order.destroy();
+        return res.status(404).json({ 
+          error: `Produit avec l'ID ${item.id} non trouvé` 
+        });
+      }
 
-      total += produit.prix * item.quantite;
+      const itemTotal = produit.prix * item.quantity;
+      total += itemTotal;
+
       await OrderProducts.create({
         orderId: order.id,
-        produitId: item.produitId,
-        quantite: item.quantite,
+        produitId: item.id,
+        quantite: item.quantity
       });
     }
 
+    // Mettre à jour le total
     order.total = total;
     await order.save();
 
-    res.status(201).json({ message: 'Commande créée', order });
+    res.status(201).json({ 
+      message: 'Commande créée avec succès',
+      orderId: order.id,
+      order: {
+        id: order.id,
+        total: order.total,
+        statut: order.statut,
+        shippingAddress: order.shippingAddress,
+        paymentMethod: order.paymentMethod,
+        createdAt: order.createdAt
+      }
+    });
+
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Erreur création commande:', err);
+    res.status(500).json({ error: err.message });
   }
 };
 
@@ -33,30 +88,94 @@ exports.getOrders = async (req, res) => {
   try {
     const orders = await Order.findAll({
       include: [
-        { model: User, as: 'user' },
-        { model: Produit, as: 'produits', through: { attributes: ['quantite'] } },
+        { 
+          model: User, 
+          as: 'user',
+          attributes: ['id', 'nom', 'email']
+        },
+        { 
+          model: Produit, 
+          as: 'produits', 
+          through: { attributes: ['quantite'] },
+          attributes: ['id', 'nom', 'prix', 'image']
+        }
       ],
+      order: [['createdAt', 'DESC']]
     });
-    res.json(orders);
+
+    const formattedOrders = orders.map(order => {
+      const customerInfo = order.customerInfo ? JSON.parse(order.customerInfo) : {};
+      
+      return {
+        id: order.id,
+        userId: order.userId,
+        user: order.user,
+        total: order.total,
+        status: order.statut,
+        shippingAddress: order.shippingAddress,
+        customerInfo,
+        paymentMethod: order.paymentMethod,
+        createdAt: order.createdAt,
+        items: order.produits.map(produit => ({
+          id: produit.id,
+          name: produit.nom,
+          price: produit.prix,
+          image: produit.image,
+          quantity: produit.OrderProducts.quantite
+        }))
+      };
+    });
+
+    res.json(formattedOrders);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Erreur récupération commandes:', err);
+    res.status(500).json({ error: err.message });
   }
 };
 
-// ➤ Récupérer les commandes d’un utilisateur
+// ➤ Récupérer les commandes d'un utilisateur
 exports.getOrdersByUser = async (req, res) => {
   try {
     const { userId } = req.params;
     const orders = await Order.findAll({
       where: { userId },
       include: [
-        { model: User, as: 'user' },
-        { model: Produit, as: 'produits', through: { attributes: ['quantite'] } },
+        { 
+          model: Produit, 
+          as: 'produits', 
+          through: { attributes: ['quantite'] },
+          attributes: ['id', 'nom', 'prix', 'image']
+        }
       ],
+      order: [['createdAt', 'DESC']]
     });
-    res.json(orders);
+
+    const formattedOrders = orders.map(order => {
+      const customerInfo = order.customerInfo ? JSON.parse(order.customerInfo) : {};
+      
+      return {
+        id: order.id,
+        userId: order.userId,
+        total: order.total,
+        status: order.statut,
+        shippingAddress: order.shippingAddress,
+        customerInfo,
+        paymentMethod: order.paymentMethod,
+        createdAt: order.createdAt,
+        items: order.produits.map(produit => ({
+          id: produit.id,
+          name: produit.nom,
+          price: produit.prix,
+          image: produit.image,
+          quantity: produit.OrderProducts.quantite
+        }))
+      };
+    });
+
+    res.json(formattedOrders);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Erreur récupération commandes:', err);
+    res.status(500).json({ error: err.message });
   }
 };
 
@@ -66,16 +185,49 @@ exports.getOrderById = async (req, res) => {
     const { id } = req.params;
     const order = await Order.findByPk(id, {
       include: [
-        { model: User, as: 'user' },
-        { model: Produit, as: 'produits', through: { attributes: ['quantite'] } },
-      ],
+        { 
+          model: User, 
+          as: 'user',
+          attributes: ['id', 'nom', 'email']
+        },
+        { 
+          model: Produit, 
+          as: 'produits', 
+          through: { attributes: ['quantite'] },
+          attributes: ['id', 'nom', 'prix', 'image']
+        }
+      ]
     });
 
-    if (!order) return res.status(404).json({ error: 'Commande non trouvée' });
+    if (!order) {
+      return res.status(404).json({ error: 'Commande non trouvée' });
+    }
 
-    res.json(order);
+    const customerInfo = order.customerInfo ? JSON.parse(order.customerInfo) : {};
+    
+    const formattedOrder = {
+      id: order.id,
+      userId: order.userId,
+      user: order.user,
+      total: order.total,
+      status: order.statut,
+      shippingAddress: order.shippingAddress,
+      customerInfo,
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt,
+      items: order.produits.map(produit => ({
+        id: produit.id,
+        name: produit.nom,
+        price: produit.prix,
+        image: produit.image,
+        quantity: produit.OrderProducts.quantite
+      }))
+    };
+
+    res.json(formattedOrder);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Erreur récupération commande:', err);
+    res.status(500).json({ error: err.message });
   }
 };
 
@@ -85,15 +237,19 @@ exports.deleteOrder = async (req, res) => {
     const { id } = req.params;
 
     await OrderProducts.destroy({ where: { orderId: id } });
-    await Order.destroy({ where: { id } });
+    const deleted = await Order.destroy({ where: { id } });
+    
+    if (!deleted) {
+      return res.status(404).json({ error: 'Commande non trouvée' });
+    }
 
-    res.json({ message: 'Commande supprimée' });
+    res.json({ message: 'Commande supprimée avec succès' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// ➤ Mettre à jour le statut d’une commande
+// ➤ Mettre à jour le statut d'une commande
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -102,16 +258,16 @@ exports.updateOrderStatus = async (req, res) => {
     const order = await Order.findByPk(id);
     if (!order) return res.status(404).json({ error: 'Commande non trouvée' });
 
-    order.status = status;
+    order.statut = status;
     await order.save();
 
     res.json({ message: 'Statut de la commande mis à jour', order });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// ➤ Mettre à jour les détails (produits) d’une commande
+// ➤ Mettre à jour les détails (produits) d'une commande
 exports.updateOrderDetails = async (req, res) => {
   try {
     const { id } = req.params;
@@ -120,8 +276,10 @@ exports.updateOrderDetails = async (req, res) => {
     const order = await Order.findByPk(id);
     if (!order) return res.status(404).json({ error: 'Commande non trouvée' });
 
+    // Supprimer les anciens produits
     await OrderProducts.destroy({ where: { orderId: id } });
 
+    // Recalculer le total
     let total = 0;
     for (const item of produits) {
       const produit = await Produit.findByPk(item.produitId);
@@ -140,11 +298,11 @@ exports.updateOrderDetails = async (req, res) => {
 
     res.json({ message: 'Détails de la commande mis à jour', order });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// ➤ Mettre à jour l’adresse de livraison
+// ➤ Mettre à jour l'adresse de livraison
 exports.updateOrderAddress = async (req, res) => {
   try {
     const { id } = req.params;
@@ -153,12 +311,12 @@ exports.updateOrderAddress = async (req, res) => {
     const order = await Order.findByPk(id);
     if (!order) return res.status(404).json({ error: 'Commande non trouvée' });
 
-    order.address = address;
+    order.shippingAddress = address;
     await order.save();
 
     res.json({ message: 'Adresse de livraison mise à jour', order });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
@@ -176,7 +334,7 @@ exports.updateOrderPaymentMethod = async (req, res) => {
 
     res.json({ message: 'Mode de paiement mis à jour', order });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
@@ -194,36 +352,44 @@ exports.updateOrderTotal = async (req, res) => {
 
     res.json({ message: 'Total de la commande mis à jour', order });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// statistiques des commandes et ventes
+// ➤ Statistiques des commandes et ventes
 exports.getOrderStats = async (req, res) => {
   try {
+    const { sequelize } = require('../models');
+    
     const totalOrders = await Order.count();
     const totalSales = await Order.sum('total');
     const ordersByStatus = await Order.findAll({
-      attributes: ['status', [sequelize.fn('COUNT', sequelize.col('status')), 'count']],
-      group: ['status'],
+      attributes: [
+        'statut', 
+        [sequelize.fn('COUNT', sequelize.col('statut')), 'count']
+      ],
+      group: ['statut'],
     });
 
     res.json({ totalOrders, totalSales, ordersByStatus });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
 
-// Rechercher des commandes par statut, date, utilisateur
+// ➤ Rechercher des commandes par statut, date, utilisateur
 exports.searchOrders = async (req, res) => {
   try {
+    const { Op } = require('sequelize');
     const { status, startDate, endDate, userId } = req.query;
     const where = {};
 
-    if (status) where.status = status;
+    if (status) where.statut = status;
     if (userId) where.userId = userId;
     if (startDate && endDate) {
-      where.createdAt = { [Op.between]: [new Date(startDate), new Date(endDate)] };
+      where.createdAt = { 
+        [Op.between]: [new Date(startDate), new Date(endDate)] 
+      };
     }
 
     const orders = await Order.findAll({
@@ -236,6 +402,6 @@ exports.searchOrders = async (req, res) => {
 
     res.json(orders);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
-}
+};

@@ -11,15 +11,7 @@ const Order = sequelize.define('Order', {
     type: DataTypes.INTEGER,
     allowNull: false,
   },
-  produitId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  quantite: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 1,
-  },
+  // SUPPRIMER produitId et quantite car on va utiliser une table de liaison
   total: {
     type: DataTypes.FLOAT,
     allowNull: false,
@@ -30,12 +22,26 @@ const Order = sequelize.define('Order', {
     allowNull: false,
     defaultValue: 'en attente',
   },
+  // NOUVEAUX CHAMPS
+  shippingAddress: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  customerInfo: {
+    type: DataTypes.TEXT, // JSON stringifié
+    allowNull: true,
+  },
+  paymentMethod: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+  },
   date: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW,
   },
 }, {
   timestamps: true,
+  tableName: 'Orders'
 });
 
 module.exports = Order;

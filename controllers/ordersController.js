@@ -214,7 +214,7 @@ exports.getOrdersByUser = async (req, res) => {
           model: Produit,
           as: 'produits',
           through: { attributes: ['quantite'] },
-          attributes: ['id', 'nom', 'prix', 'image']
+          attributes: ['id', 'nom', 'prix', 'imagePath', 'imageId'] // ✅ Correction ici
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -236,7 +236,7 @@ exports.getOrdersByUser = async (req, res) => {
           id: produit.id,
           name: produit.nom,
           price: produit.prix,
-          image: produit.image,
+          image: produit.imagePath, // ✅ Correction ici
           quantity: produit.OrderProducts.quantite
         }))
       };
@@ -263,7 +263,7 @@ exports.getOrderById = async (req, res) => {
           model: Produit,
           as: 'produits',
           through: { attributes: ['quantite'] },
-          attributes: ['id', 'nom', 'prix', 'image']
+          attributes: ['id', 'nom', 'prix', 'imagePath', 'imageId'] // ✅ Correction ici
         }
       ]
     });
@@ -288,7 +288,7 @@ exports.getOrderById = async (req, res) => {
         id: produit.id,
         name: produit.nom,
         price: produit.prix,
-        image: produit.image,
+        image: produit.imagePath, // ✅ Correction ici
         quantity: produit.OrderProducts.quantite
       }))
     };

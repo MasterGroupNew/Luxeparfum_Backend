@@ -28,14 +28,14 @@ exports.register = async (req, res) => {
       return res.status(409).json({ error: "Un utilisateur avec cet email ou contact existe déjà." });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    //const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
       nom,
       prenoms,
       contact,
       email,
-      password: hashedPassword, // ✅ Correction : utiliser hashedPassword
+      password,//: hashedPassword, // ✅ Correction : utiliser hashedPassword
       role: role || 'user',
       photoUrl: req.file ? req.file.path : null, // ✅ URL Cloudinary complète
       photoId: req.file ? req.file.filename : null, // ✅ ID Cloudinary pour suppression
@@ -72,6 +72,7 @@ exports.login = async (req, res) => {
     if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
 
     const valid = await bcrypt.compare(password, user.password);
+    console.log('✅ Mot de passe vérifié pour l\'utilisateur:', user.id, user.email, user.contact, user.role, valid);
     if (!valid) return res.status(401).json({ error: 'Mot de passe incorrect' });
 
     const token = jwt.sign({ id: user.id, role: user.role }, SECRET, { expiresIn: '1d' });

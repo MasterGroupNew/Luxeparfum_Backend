@@ -4,20 +4,20 @@ const { Cart, CartProduct, Product } = require('../models/index');
 exports.addToCart = async (req, res) => {
   try {
     const user = req.user; // injecté par le middleware auth
-    const { productId, quantity } = req.body;
+    const { produitId, quantity } = req.body;
 
     if (!user) return res.status(401).json({ error: 'Non autorisé' });
 
     // Cherche le panier de l'utilisateur
-    let cart = await Cart.findOne({ where: {   userId: user.id } });
+    let cart = await Cart.findOne({ where: { userId: user.id } });
 
     if (!cart) {
-      cart = await Cart.create({   userId: user.id });
+      cart = await Cart.create({ userId: user.id });
     }
 
     // Vérifie si le produit est déjà dans le panier
     let item = await CartProduct.findOne({
-      where: { cartId: cart.id, productId }
+      where: { cartId: cart.id, produitId }
     });
 
     if (item) {
@@ -26,7 +26,7 @@ exports.addToCart = async (req, res) => {
     } else {
       await CartProduct.create({
         cartId: cart.id,
-        productId,
+        produitId,
         quantity
       });
     }
@@ -44,7 +44,7 @@ exports.getCart = async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Non autorisé' });
 
     const cart = await Cart.findOne({
-      where: {   userId: user.id },
+      where: { userId: user.id },
       include: {
         model: Product,
         through: { attributes: ['quantity'] }
@@ -70,16 +70,16 @@ exports.syncCartFromLocalStorage = async (req, res) => {
       return res.status(400).json({ error: "Requête invalide" });
     }
 
-    let cart = await Cart.findOne({ where: {   userId: user.id } });
+    let cart = await Cart.findOne({ where: { userId: user.id } });
     if (!cart) {
-      cart = await Cart.create({   userId: user.id });
+      cart = await Cart.create({ userId: user.id });
     }
 
     for (const item of produits) {
       const { produitId, quantite } = item;
 
       const exist = await CartProduct.findOne({
-        where: { cartId: cart.id, productId: produitId }
+        where: { cartId: cart.id, produitId: produitId }
       });
 
       if (exist) {
@@ -88,7 +88,7 @@ exports.syncCartFromLocalStorage = async (req, res) => {
       } else {
         await CartProduct.create({
           cartId: cart.id,
-          productId: produitId,
+          produitId: produitId,
           quantity: quantite
         });
       }
@@ -104,15 +104,15 @@ exports.syncCartFromLocalStorage = async (req, res) => {
 exports.removeFromCart = async (req, res) => {
   try {
     const user = req.user;
-    const { productId } = req.params;
+    const { produitId } = req.params;
 
     if (!user) return res.status(401).json({ error: 'Non autorisé' });
 
-    const cart = await Cart.findOne({ where: {   userId: user.id } });
+    const cart = await Cart.findOne({ where: { userId: user.id } });
     if (!cart) return res.status(404).json({ error: 'Panier non trouvé' });
 
     const item = await CartProduct.findOne({
-      where: { cartId: cart.id, productId }
+      where: { cartId: cart.id, produitId }
     });
 
     if (!item) return res.status(404).json({ error: 'Produit non trouvé dans le panier' });

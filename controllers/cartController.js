@@ -38,25 +38,52 @@ exports.addToCart = async (req, res) => {
 };
 
 // 🛒 Obtenir les produits du panier pour un utilisateur connecté
+// ✅ CORRECTION : Récupérer le panier de l'utilisateur
 exports.getCart = async (req, res) => {
   try {
     const user = req.user;
-    if (!user) return res.status(401).json({ error: 'Non autorisé' });
 
+    if (!user) {
+      return res.status(401).json({ error: "Non authentifié" });
+    }
+
+    // Trouver le panier de l'utilisateur
     const cart = await Cart.findOne({
       where: { userId: user.id },
-      include: {
-        model: Product,
-        through: { attributes: ['quantity'] }
-      }
+      include: [
+        {
+          model: CartProduct,  // ✅ Utiliser le modèle, pas une string
+          as: 'items',  // ✅ L'alias défini dans vos associations
+          include: [
+            {
+              model: Product,  // ✅ Utiliser le modèle Product
+              as: 'produit',  // ✅ L'alias pour le produit
+              attributes: ['id', 'nom', 'prix', 'imagePath']  // Colonnes à récupérer
+            }
+          ]
+        }
+      ]
     });
 
-    if (!cart) return res.json({ produits: [] });
+    if (!cart) {
+      return res.status(200).json({ cart: { items: [] } });
+    }
 
-    res.json(cart.Products);
+    // Formater les données pour le frontend
+    const formattedCart = {
+      items: cart.items.map(item => ({
+        id: item.produit.id,
+        name: item.produit.nom,
+        price: item.produit.prix,
+        image: item.produit.imagePath,
+        quantity: item.quantity
+      }))
+    };
+
+    res.status(200).json({ cart: formattedCart });
   } catch (error) {
     console.error("Erreur lecture panier:", error);
-    res.status(500).send("Erreur serveur");
+    res.status(500).json({ error: "Erreur serveur" });
   }
 };
 

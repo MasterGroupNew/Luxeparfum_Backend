@@ -9,10 +9,10 @@ exports.addToCart = async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Non autorisé' });
 
     // Cherche le panier de l'utilisateur
-    let cart = await Cart.findOne({ where: { user_id: user.id } });
+    let cart = await Cart.findOne({ where: {   userId: user.id } });
 
     if (!cart) {
-      cart = await Cart.create({ user_id: user.id });
+      cart = await Cart.create({   userId: user.id });
     }
 
     // Vérifie si le produit est déjà dans le panier
@@ -44,7 +44,7 @@ exports.getCart = async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Non autorisé' });
 
     const cart = await Cart.findOne({
-      where: { user_id: user.id },
+      where: {   userId: user.id },
       include: {
         model: Product,
         through: { attributes: ['quantity'] }
@@ -70,9 +70,9 @@ exports.syncCartFromLocalStorage = async (req, res) => {
       return res.status(400).json({ error: "Requête invalide" });
     }
 
-    let cart = await Cart.findOne({ where: { user_id: user.id } });
+    let cart = await Cart.findOne({ where: {   userId: user.id } });
     if (!cart) {
-      cart = await Cart.create({ user_id: user.id });
+      cart = await Cart.create({   userId: user.id });
     }
 
     for (const item of produits) {
@@ -108,7 +108,7 @@ exports.removeFromCart = async (req, res) => {
 
     if (!user) return res.status(401).json({ error: 'Non autorisé' });
 
-    const cart = await Cart.findOne({ where: { user_id: user.id } });
+    const cart = await Cart.findOne({ where: {   userId: user.id } });
     if (!cart) return res.status(404).json({ error: 'Panier non trouvé' });
 
     const item = await CartProduct.findOne({

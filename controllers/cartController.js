@@ -1,9 +1,9 @@
-const { Cart, CartProduct, Product } = require('../models/index');
+const { Cart, CartProduct, Produit, Category } = require('../models/index');
 
-// ➕ Ajouter un produit au panier (uniquement pour utilisateur connecté)
+// ➕ Ajouter un produit au panier
 exports.addToCart = async (req, res) => {
   try {
-    const user = req.user; // injecté par le middleware auth
+    const user = req.user;
     const { produitId, quantity } = req.body;
 
     if (!user) return res.status(401).json({ error: 'Non autorisé' });
@@ -21,24 +21,23 @@ exports.addToCart = async (req, res) => {
     });
 
     if (item) {
-      item.quantity += quantity;
+      item.quantite += quantity;
       await item.save();
     } else {
       await CartProduct.create({
         cartId: cart.id,
         produitId,
-        quantity
+        quantite: quantity
       });
     }
     res.status(200).json({ message: "Produit ajouté au panier" });
   } catch (error) {
     console.error("Erreur panier:", error);
-    res.status(500).send("Erreur serveur");
+    res.status(500).json({ error: error.message });
   }
 };
 
-// 🛒 Obtenir les produits du panier pour un utilisateur connecté
-// ✅ CORRECTION : Récupérer le panier de l'utilisateur
+// 🛒 Obtenir les produits du panier
 exports.getCart = async (req, res) => {
   try {
     const user = req.user;
@@ -47,18 +46,22 @@ exports.getCart = async (req, res) => {
       return res.status(401).json({ error: "Non authentifié" });
     }
 
-    // Trouver le panier de l'utilisateur
+    // Trouver le panier de l'utilisateur avec la bonne association
     const cart = await Cart.findOne({
       where: { userId: user.id },
       include: [
         {
-          model: CartProduct,  // ✅ Utiliser le modèle, pas une string
-          as: 'items',  // ✅ L'alias défini dans vos associations
+          model: Produit,  // ✅ Directement Produit via belongsToMany
+          as: 'produits',  // ✅ L'alias défini dans Cart.belongsToMany
+          through: { 
+            attributes: ['quantite', 'id'] 
+          },
+          attributes: ['id', 'nom', 'prix', 'imagePath'],
           include: [
             {
-              model: Product,  // ✅ Utiliser le modèle Product
-              as: 'produit',  // ✅ L'alias pour le produit
-              attributes: ['id', 'nom', 'prix', 'imagePath']  // Colonnes à récupérer
+              model: Category,
+              as: 'categorie',
+              attributes: ['id', 'nom']
             }
           ]
         }
@@ -66,24 +69,32 @@ exports.getCart = async (req, res) => {
     });
 
     if (!cart) {
-      return res.status(200).json({ cart: { items: [] } });
+      return res.status(200).json({ 
+        cart: { 
+          id: null,
+          produits: [] 
+        } 
+      });
     }
 
     // Formater les données pour le frontend
     const formattedCart = {
-      items: cart.items.map(item => ({
-        id: item.produit.id,
-        name: item.produit.nom,
-        price: item.produit.prix,
-        image: item.produit.imagePath,
-        quantity: item.quantity
+      id: cart.id,
+      userId: cart.userId,
+      produits: cart.produits.map(produit => ({
+        id: produit.id,
+        name: produit.nom,
+        price: produit.prix,
+        image: produit.imagePath,
+        quantity: produit.CartProduct.quantite, // ✅ Via la table de liaison
+        categorie: produit.categorie?.nom || 'Non catégorisé'
       }))
     };
 
     res.status(200).json({ cart: formattedCart });
   } catch (error) {
     console.error("Erreur lecture panier:", error);
-    res.status(500).json({ error: "Erreur serveur" });
+    res.status(500).json({ error: error.message });
   }
 };
 
@@ -103,20 +114,20 @@ exports.syncCartFromLocalStorage = async (req, res) => {
     }
 
     for (const item of produits) {
-      const { produitId, quantite } = item;
+      const { id, quantity } = item;
 
       const exist = await CartProduct.findOne({
-        where: { cartId: cart.id, produitId: produitId }
+        where: { cartId: cart.id, produitId: id }
       });
 
       if (exist) {
-        exist.quantity += quantite;
+        exist.quantite += quantity;
         await exist.save();
       } else {
         await CartProduct.create({
           cartId: cart.id,
-          produitId: produitId,
-          quantity: quantite
+          produitId: id,
+          quantite: quantity
         });
       }
     }
@@ -124,9 +135,42 @@ exports.syncCartFromLocalStorage = async (req, res) => {
     res.status(200).json({ message: "Panier synchronisé avec succès" });
   } catch (error) {
     console.error("Erreur sync panier:", error);
-    res.status(500).json({ error: "Erreur serveur" });
+    res.status(500).json({ error: error.message });
   }
 };
+
+// 🔄 Mettre à jour la quantité
+exports.updateCartItem = async (req, res) => {
+  try {
+    const user = req.user;
+    const { produitId } = req.params;
+    const { quantity } = req.body;
+
+    if (!user) return res.status(401).json({ error: 'Non autorisé' });
+
+    const cart = await Cart.findOne({ where: { userId: user.id } });
+    if (!cart) return res.status(404).json({ error: 'Panier non trouvé' });
+
+    const item = await CartProduct.findOne({
+      where: { cartId: cart.id, produitId }
+    });
+
+    if (!item) return res.status(404).json({ error: 'Produit non trouvé dans le panier' });
+
+    if (quantity <= 0) {
+      await item.destroy();
+    } else {
+      item.quantite = quantity;
+      await item.save();
+    }
+
+    res.json({ message: 'Quantité mise à jour' });
+  } catch (error) {
+    console.error("Erreur mise à jour panier:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // 🗑️ Supprimer un produit du panier
 exports.removeFromCart = async (req, res) => {
   try {
@@ -148,6 +192,25 @@ exports.removeFromCart = async (req, res) => {
     res.json({ message: 'Produit supprimé du panier' });
   } catch (error) {
     console.error("Erreur suppression panier:", error);
-    res.status(500).send("Erreur serveur");
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// 🗑️ Vider le panier
+exports.clearCart = async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user) return res.status(401).json({ error: 'Non autorisé' });
+
+    const cart = await Cart.findOne({ where: { userId: user.id } });
+    if (!cart) return res.status(404).json({ error: 'Panier non trouvé' });
+
+    await CartProduct.destroy({ where: { cartId: cart.id } });
+
+    res.json({ message: 'Panier vidé avec succès' });
+  } catch (error) {
+    console.error("Erreur vidage panier:", error);
+    res.status(500).json({ error: error.message });
   }
 };

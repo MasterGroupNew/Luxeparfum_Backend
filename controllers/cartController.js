@@ -21,13 +21,13 @@ exports.addToCart = async (req, res) => {
     });
 
     if (item) {
-      item.quantite += quantity;
+      item.quantity += quantity;
       await item.save();
     } else {
       await CartProduct.create({
         cartId: cart.id,
         produitId,
-        quantite: quantity
+        quantity: quantity
       });
     }
     res.status(200).json({ message: "Produit ajouté au panier" });
@@ -54,7 +54,7 @@ exports.getCart = async (req, res) => {
           model: Produit,  // ✅ Directement Produit via belongsToMany
           as: 'produits',  // ✅ L'alias défini dans Cart.belongsToMany
           through: { 
-            attributes: ['quantite', 'id'] 
+            attributes: ['quantity', 'id'] 
           },
           attributes: ['id', 'nom', 'prix', 'imagePath'],
           include: [
@@ -86,7 +86,7 @@ exports.getCart = async (req, res) => {
         name: produit.nom,
         price: produit.prix,
         image: produit.imagePath,
-        quantity: produit.CartProduct.quantite, // ✅ Via la table de liaison
+        quantity: produit.CartProduct.quantity, // ✅ Via la table de liaison
         categorie: produit.categorie?.nom || 'Non catégorisé'
       }))
     };
@@ -121,13 +121,13 @@ exports.syncCartFromLocalStorage = async (req, res) => {
       });
 
       if (exist) {
-        exist.quantite += quantity;
+        exist.quantity += quantity;
         await exist.save();
       } else {
         await CartProduct.create({
           cartId: cart.id,
           produitId: id,
-          quantite: quantity
+          quantity: quantity
         });
       }
     }
@@ -160,7 +160,7 @@ exports.updateCartItem = async (req, res) => {
     if (quantity <= 0) {
       await item.destroy();
     } else {
-      item.quantite = quantity;
+      item.quantity = quantity;
       await item.save();
     }
 

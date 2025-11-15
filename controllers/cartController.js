@@ -99,13 +99,23 @@ exports.getCart = async (req, res) => {
 };
 
 // 🔄 Synchroniser les produits du localStorage au backend
+// 🔄 Synchroniser les produits du localStorage au backend
 exports.syncCartFromLocalStorage = async (req, res) => {
   try {
     const user = req.user;
     const { produits } = req.body;
 
+    console.log('=== SYNC CART ===');
+    console.log('User:', user.id);
+    console.log('Produits reçus:', JSON.stringify(produits, null, 2));
+
     if (!user || !Array.isArray(produits)) {
       return res.status(400).json({ error: "Requête invalide" });
+    }
+
+    // Validation des produits
+    if (produits.length === 0) {
+      return res.status(200).json({ message: "Aucun produit à synchroniser" });
     }
 
     let cart = await Cart.findOne({ where: { userId: user.id } });
@@ -114,21 +124,35 @@ exports.syncCartFromLocalStorage = async (req, res) => {
     }
 
     for (const item of produits) {
-      const { id, quantity } = item;
+      // ✅ CORRECTION: Le frontend envoie probablement "id" et non "produitId"
+      const produitId = item.id || item.produitId;
+      const quantity = item.quantity || item.quantite || 1;
+
+      console.log(`Processing: produitId=${produitId}, quantity=${quantity}`);
+
+      if (!produitId) {
+        console.error('produitId manquant pour:', item);
+        continue; // Passer au suivant si pas d'ID
+      }
 
       const exist = await CartProduct.findOne({
-        where: { cartId: cart.id, produitId: id }
+        where: { 
+          cartId: cart.id, 
+          produitId: produitId  // ✅ Utiliser la variable, pas item.id
+        }
       });
 
       if (exist) {
         exist.quantity += quantity;
         await exist.save();
+        console.log(`Updated: ${produitId}, nouvelle quantité: ${exist.quantity}`);
       } else {
         await CartProduct.create({
           cartId: cart.id,
-          produitId: id,
+          produitId: produitId,  // ✅ Utiliser la variable
           quantity: quantity
         });
+        console.log(`Created: ${produitId}, quantité: ${quantity}`);
       }
     }
 

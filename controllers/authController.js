@@ -102,14 +102,14 @@ exports.addUser = async (req, res) => {
       return res.status(409).json({ error: 'Un utilisateur avec cet email ou contact existe déjà.' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    
 
     const newUser = await User.create({
       nom,
       prenoms,
       contact,
       email,
-      password: hashedPassword,
+      password,
       role,
       photoUrl: req.file ? req.file.path : null, // ✅ URL Cloudinary
       photoId: req.file ? req.file.filename : null, // ✅ ID Cloudinary

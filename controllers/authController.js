@@ -353,19 +353,34 @@ exports.getUsersByRole = async (req, res) => {
 // =====================
 exports.resetPassword = async (req, res) => {
   try {
-    const { email, newPassword } = req.body;
-    if (!email || !newPassword) {
-      return res.status(400).json({ error: 'Email et nouveau mot de passe requis.' });
+    const { identifier, newPassword } = req.body
+
+    if (!identifier || !newPassword) {
+      return res.status(400).json({ 
+        error: 'Identifiant et nouveau mot de passe sont requis.' 
+      })
     }
 
-    const user = await User.findOne({ where: { email } });
-    if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    // Cherche par email OU contact
+    const user = await User.findOne({
+      where: {
+        [Op.or]: [
+          { email: identifier },
+          { contact: identifier }
+        ]
+      }
+    })
 
-    user.password = await bcrypt.hash(newPassword, 10);
-    await user.save();
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' })
+    }
 
-    res.json({ message: 'Mot de passe réinitialisé avec succès' });
+    user.password = await bcrypt.hash(newPassword, 10)
+    await user.save()
+
+    res.json({ message: 'Mot de passe réinitialisé avec succès' })
+
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message })
   }
 };

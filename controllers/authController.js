@@ -196,7 +196,7 @@ exports.updateUser = async (req, res) => {
       country: country || user.country
     };
     
-    if (password) updatedData.password = await bcrypt.hash(password, 10);
+    if (password) updatedData.password = password; // ✅ Le hook beforeUpdate va hasher automatiquement
 
     await user.update(updatedData);
     
@@ -295,7 +295,7 @@ exports.updateProfile = async (req, res) => {
       country: country || user.country
     };
     
-    if (password) updatedData.password = await bcrypt.hash(password, 10);
+    if (password) updatedData.password = password; // ✅ Laisser le hook beforeUpdate gérer le hash
 
     await user.update(updatedData);
     
@@ -313,26 +313,26 @@ exports.updateProfile = async (req, res) => {
 // =====================
 exports.changePassword = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id);
-    if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    const user = await User.findByPk(req.user.id)
+    if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' })
 
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Les deux champs sont obligatoires.' });
+      return res.status(400).json({ error: 'Les deux champs sont obligatoires.' })
     }
 
-    const valid = await bcrypt.compare(currentPassword, user.password);
-    if (!valid) return res.status(401).json({ error: 'Mot de passe actuel incorrect' });
+    const valid = await bcrypt.compare(currentPassword, user.password)
+    if (!valid) return res.status(401).json({ error: 'Mot de passe actuel incorrect' })
 
-    user.password = await bcrypt.hash(newPassword, 10);
-    await user.save();
+    // ✅ Assigne directement → le hook beforeUpdate hash automatiquement
+    user.password = newPassword
+    await user.save()
 
-    res.json({ message: 'Mot de passe changé avec succès' });
+    res.json({ message: 'Mot de passe changé avec succès' })
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message })
   }
 };
-
 // =====================
 // Récupérer utilisateurs par rôle
 // =====================
@@ -356,26 +356,19 @@ exports.resetPassword = async (req, res) => {
     const { identifier, newPassword } = req.body
 
     if (!identifier || !newPassword) {
-      return res.status(400).json({ 
-        error: 'Identifiant et nouveau mot de passe sont requis.' 
-      })
+      return res.status(400).json({ error: 'Identifiant et nouveau mot de passe sont requis.' })
     }
 
-    // Cherche par email OU contact
     const user = await User.findOne({
       where: {
-        [Op.or]: [
-          { email: identifier },
-          { contact: identifier }
-        ]
+        [Op.or]: [{ email: identifier }, { contact: identifier }]
       }
     })
 
-    if (!user) {
-      return res.status(404).json({ error: 'Utilisateur non trouvé' })
-    }
+    if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' })
 
-    user.password = await bcrypt.hash(newPassword, 10)
+    // ✅ Assigne directement → le hook beforeUpdate va hasher automatiquement
+    user.password = newPassword
     await user.save()
 
     res.json({ message: 'Mot de passe réinitialisé avec succès' })
@@ -383,4 +376,4 @@ exports.resetPassword = async (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message })
   }
-};
+}
